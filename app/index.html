@@ -1,0 +1,122 @@
+<html>
+    <head>
+        <style>
+            body {
+                padding: 0;
+                margin: 0;
+            }
+            .title-bar {
+                -webkit-app-region: drag;
+                -webkit-user-select: none;
+                width: 100%;
+                height: 20px;
+                background-color: red;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="title-bar"></div>
+        <script>
+            const { ipcRenderer } = require('electron');
+            const { Subject, fromEvent } = require('rxjs');
+            const { filter, tap, map, pairwise, share, sample } = require('rxjs/operators');
+            const subject = new Subject();
+            let position = null;
+            const ACTIVE_ZONE = 50;
+
+            const Stick = {
+                Left: 'StickLeft',
+                Right: 'StickRight',
+                Top: 'StickTop',
+                Bottom: 'StickBottom',
+                None: 'StickNone',
+            };
+
+            function canStickLeft(moving, still) {
+                const movingRightX = moving.x + moving.width;
+                const stillActiveZoneStartX = still.x - ACTIVE_ZONE;
+                const stillActiveZoneEndX = still.x + ACTIVE_ZONE;
+                const movingBottomY = moving.y + moving.height;
+                const stillBottomY = still.y + still.height;
+                return (
+                    movingRightX >= stillActiveZoneStartX &&
+                    movingRightX <= stillActiveZoneEndX &&
+                    ((moving.y >= still.y && moving.y <= stillBottomY) ||
+                        (movingBottomY >= still.y && movingBottomY <= stillBottomY) ||
+                        (moving.y < still.y && movingBottomY > stillBottomY))
+                );
+            }
+
+            function calcLeftRightIntersection(moving, still) {
+                const movingBottomY = moving.y + moving.height;
+                const stillBottomY = still.y + still.height;
+                switch (true) {
+                    case movingBottomY > stillBottomY && moving.y < still.y: {
+                        return still.height;
+                    }
+                    case movingBottomY <= stillBottomY && moving.y >= still.y: {
+                        return moving.height;
+                    }
+                    case moving.y < still.y && movingBottomY <= stillBottomY: {
+                        return movingBottomY - still.y;
+                    }
+                    case moving.y >= still.y && movingBottomY > stillBottomY: {
+                        return stillBottomY - moving.y;
+                    }
+                }
+            }
+
+            function canStick(moving, still) {
+                if (canStickLeft(moving, still)) {
+                    return Stick.Left;
+                }
+                return Stick.None;
+            }
+
+            ipcRenderer.on('position-changed', (event, payload) => {
+                if (payload.windowId === GLAZIER_WINDOW.id) {
+                    position = payload;
+                    return;
+                } else {
+                    position = position || GLAZIER_WINDOW.position;
+                }
+                subject.next(payload);
+            });
+            subject
+                .pipe(
+                    map((moving) => ({ moving, stickAt: canStick(moving, position) })),
+                    pairwise(),
+                    tap(([{ stickAt: previous, moving }, { stickAt: current }]) => {
+                        if (previous !== Stick.None && current === Stick.None) {
+                            ipcRenderer.send('exited-active-zone', {
+                                still: GLAZIER_WINDOW.id,
+                                moving: moving.windowId,
+                                stickAt: previous,
+                            });
+                        }
+                    }),
+                    filter(([_, { stickAt }]) => stickAt !== Stick.None),
+                    map(([_, { moving, stickAt }]) => ({
+                        moving,
+                        stickAt,
+                        intersection: calcLeftRightIntersection(moving, position),
+                    })),
+                )
+                .subscribe({
+                    next: ({ moving, stickAt, intersection }) => {
+                        ipcRenderer.send('entered-active-zone', {
+                            still: GLAZIER_WINDOW.id,
+                            moving: moving.windowId,
+                            stickAt,
+                            intersection,
+                        });
+                    },
+                });
+            document.addEventListener('mouseup', () => {
+                ipcRenderer.send('mouse-up', {
+                    windowId: GLAZIER_WINDOW.id,
+                });
+            });
+        </script>
+    </body>
+</html>

@@ -1,0 +1,33 @@
+{
+    "name": "glazier",
+    "version": "0.0.1",
+    "description": "A windows layout manager for Electron",
+    "main": "app/main.js",
+    "scripts": {
+        "test": "npm run test",
+        "start": "electron ."
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/ilya-sharonov/glazier.git"
+    },
+    "keywords": [
+        "Electron",
+        "window",
+        "manager"
+    ],
+    "author": "Ilya Sharonov",
+    "license": "MIT",
+    "bugs": {
+        "url": "https://github.com/ilya-sharonov/glazier/issues"
+    },
+    "homepage": "https://github.com/ilya-sharonov/glazier#readme",
+    "devDependencies": {
+        "electron": "^8.2.1",
+        "typescript": "^3.8.3"
+    },
+    "dependencies": {
+        "rxjs": "^6.5.5",
+        "uuid": "^7.0.3"
+    }
+}
