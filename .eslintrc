@@ -1,0 +1,56 @@
+{
+    "root": true,
+    "parser": "@typescript-eslint/parser",
+    "plugins": ["@typescript-eslint", "jest", "node", "import"],
+    "extends": [
+        "eslint:recommended",
+        "plugin:@typescript-eslint/eslint-recommended",
+        "plugin:@typescript-eslint/recommended",
+        "plugin:@typescript-eslint/recommended-requiring-type-checking",
+        "plugin:import/errors",
+        "plugin:import/warnings",
+        "plugin:node/recommended",
+        "plugin:jest/recommended",
+        "prettier/@typescript-eslint"
+    ],
+    "env": {
+        "browser": true,
+        "es6": true,
+        "node": true,
+        "jest/globals": true
+    },
+    "globals": {
+        "Atomics": "readonly",
+        "SharedArrayBuffer": "readonly"
+    },
+    "parserOptions": {
+        "ecmaVersion": 2018,
+        "sourceType": "module",
+        "project": "./tsconfig.json"
+    },
+    "rules": {
+        "node/no-unsupported-features/es-syntax": "off",
+        "node/no-unpublished-import": [
+            "error",
+            {
+                "allowModules": ["electron"]
+            }
+        ],
+        "node/no-missing-import": [
+            "error",
+            {
+                "allowModules": ["electron"],
+                "resolvePaths": ["./src/"],
+                "tryExtensions": [".js", ".ts"]
+            }
+        ]
+    },
+    "settings": {
+        "import/resolver": {
+            "node": {
+                "extensions": [".js", ".ts"],
+                "moduleDirectory": ["node_modules", "./src/"]
+            }
+        }
+    }
+}
