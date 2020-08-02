@@ -2,8 +2,20 @@ import { ipcMain, BrowserWindow, globalShortcut, BrowserWindowConstructorOptions
 import * as uuid from 'uuid';
 import { Subject, throwError, ReplaySubject, Subscription } from 'rxjs';
 import { filter, sample, tap, switchMap, distinctUntilChanged, scan, first, map, takeUntil } from 'rxjs/operators';
-import { ActiveZoneEnter, ActiveZoneExit } from './models';
-import { EMPTY_INTERSECTION, DEFAULT_ACTIVE_ZONE, Stick } from './constants';
+import { ActiveZoneEnter, ActiveZoneExit, WindowMoveEvent } from './models';
+import {
+    EMPTY_INTERSECTION,
+    DEFAULT_ACTIVE_ZONE,
+    Stick,
+    WM_ENTERSIZEMOVE,
+    WM_MOVING,
+    // WM_WINDOWPOSCHANGING,
+    WM_MOVE,
+    // WM_WINDOWPOSCHANGED,
+    WM_EXITSIZEMOVE,
+    WM_SIZING,
+    WM_SIZE,
+} from './constants';
 
 export class Glazier {
     private windows: Map<string, BrowserWindow>;
@@ -15,6 +27,12 @@ export class Glazier {
     private placeholder: BrowserWindow;
     private groups: Map<string, Set<string>>;
     private registry: Map<string, string>;
+    private enterSizeMoveObservable: Subject<{ windowId: string }>;
+    private exitSizeMoveObservable: Subject<{ windowId: string }>;
+    private movingObservable: Subject<WindowMoveEvent>;
+    private moveObservable: Subject<WindowMoveEvent>;
+    private sizingObservable: Subject<WindowMoveEvent>;
+    private sizeObservable: Subject<WindowMoveEvent>;
 
     constructor() {
         this.windows = new Map();
@@ -25,8 +43,24 @@ export class Glazier {
         this.enterActiveZoneReplay = new ReplaySubject(1);
         this.exitActiveZoneObservable = new Subject();
         this.dockCommandObservable = new Subject();
+        this.enterSizeMoveObservable = new Subject();
+        this.exitSizeMoveObservable = new Subject();
+        this.movingObservable = new Subject();
+        this.moveObservable = new Subject();
+        this.sizingObservable = new Subject();
+        this.sizeObservable = new Subject();
         this.subscription = null;
         this.init();
+    }
+
+    createGroup(still: string, moving: string): void {
+        const existingGroupId = this.registry.get(still);
+        const groupId = existingGroupId ?? uuid.v4();
+        const existingGroup = this.groups.get(groupId) ?? new Set([still, moving]);
+
+        this.groups.set(groupId, new Set([still, moving]));
+        this.registry.set(still, groupId);
+        this.registry.set(moving, groupId);
     }
 
     stickWindows(stickData: ActiveZoneEnter): void {
@@ -63,10 +97,6 @@ export class Glazier {
             }
         }
         movingWindow.setBounds(movingBounds);
-        const groupId = uuid.v4();
-        this.groups.set(groupId, new Set([still, moving]));
-        this.registry.set(still, groupId);
-        this.registry.set(moving, groupId);
         this.hidePlaceholder();
         this.setupPipes();
     }
@@ -110,9 +140,9 @@ export class Glazier {
         const bounds = this.getPlaceholderBounds(stickAt, stillBounds);
         this.placeholder.setBounds(bounds);
         this.placeholder.setOpacity(0.5);
-        this.placeholder.show();
-        stillWindow.moveAbove(this.placeholder.getMediaSourceId());
-        movingWindow.moveAbove(this.placeholder.getMediaSourceId());
+        this.placeholder.showInactive();
+        // stillWindow.moveAbove(this.placeholder.getMediaSourceId());
+        // movingWindow.moveAbove(this.placeholder.getMediaSourceId());
     }
 
     hidePlaceholder(): void {
@@ -155,15 +185,15 @@ export class Glazier {
                             ),
                         ),
                         tap(() => console.log('Passed takeUntil')),
-                        sample(this.dockCommandObservable.pipe(first())),
+                        sample(this.moveObservable.pipe(sample(this.exitSizeMoveObservable))),
                         tap(() => console.log('passed sample')),
                         map(() => stickData),
                     );
                 }),
             )
             .subscribe({
-                error: () => {
-                    console.log('exited');
+                error: (err) => {
+                    console.log('exited', err);
                     this.hidePlaceholder();
                     this.unsubscribe();
                     this.setupPipes();
@@ -237,35 +267,57 @@ export class Glazier {
                 this.windows.delete(windowId);
             });
             window.on('will-move', (_, newBounds) => {
-                const groupId = this.registry.get(windowId);
-                if (groupId) {
-                    console.log('will move grouped', windowId, newBounds);
-                    const windowIds = this.groups.get(groupId);
-                    if (windowIds) {
-                        [...windowIds]
-                            .filter((wid) => wid !== windowId)
-                            .forEach((windId) => {
-                                const frame = this.windows.get(windId);
-                                if (frame) {
-                                    const previousBounds = window.getBounds();
-                                    const deltaX = previousBounds.x - newBounds.x;
-                                    const deltaY = previousBounds.y - newBounds.y;
-                                    const frameBounds = frame.getBounds();
-                                    frame.setBounds({
-                                        ...frameBounds,
-                                        x: frameBounds.x + deltaX,
-                                        y: frameBounds.y + deltaY,
-                                    });
-                                }
-                            });
-                    }
-                }
+                // const groupId = this.registry.get(windowId);
+                // if (groupId) {
+                //     console.log('will move grouped', windowId, newBounds);
+                //     const windowIds = this.groups.get(groupId);
+                //     if (windowIds) {
+                //         [...windowIds]
+                //             .filter((wid) => wid !== windowId)
+                //             .forEach((windId) => {
+                //                 const frame = this.windows.get(windId);
+                //                 if (frame) {
+                //                     const previousBounds = window.getBounds();
+                //                     const deltaX = previousBounds.x - newBounds.x;
+                //                     const deltaY = previousBounds.y - newBounds.y;
+                //                     const frameBounds = frame.getBounds();
+                //                     frame.setBounds({
+                //                         ...frameBounds,
+                //                         x: frameBounds.x + deltaX,
+                //                         y: frameBounds.y + deltaY,
+                //                     });
+                //                 }
+                //             });
+                //     }
+                // }
             });
             window.on('move', () => {
                 const event = { ...window.getBounds(), windowId };
                 [...this.windows.values()].forEach((storedWindow) => {
                     storedWindow.webContents.send('position-changed', event);
                 });
+            });
+            window.hookWindowMessage(WM_ENTERSIZEMOVE, () => {
+                this.enterSizeMoveObservable.next({ windowId });
+            });
+            window.hookWindowMessage(WM_MOVING, () => {
+                const event = { ...window.getBounds(), windowId };
+                this.movingObservable.next(event);
+            });
+            window.hookWindowMessage(WM_MOVE, () => {
+                const event = { ...window.getBounds(), windowId };
+                this.moveObservable.next(event);
+            });
+            window.hookWindowMessage(WM_SIZING, () => {
+                const event = { ...window.getBounds(), windowId };
+                this.sizingObservable.next(event);
+            });
+            window.hookWindowMessage(WM_SIZE, () => {
+                const event = { ...window.getBounds(), windowId };
+                this.sizeObservable.next(event);
+            });
+            window.hookWindowMessage(WM_EXITSIZEMOVE, () => {
+                this.exitSizeMoveObservable.next({ windowId });
             });
         } catch (e) {
             console.log(e);
