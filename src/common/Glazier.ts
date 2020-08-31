@@ -1,7 +1,6 @@
 import { ipcMain, BrowserWindow, globalShortcut, BrowserWindowConstructorOptions } from 'electron';
-import * as uuid from 'uuid';
 import { Subject, throwError, ReplaySubject, Subscription } from 'rxjs';
-import { filter, sample, tap, switchMap, distinctUntilChanged, scan, first, map, takeUntil } from 'rxjs/operators';
+import { filter, sample, tap, switchMap, distinctUntilChanged, scan, map, takeUntil } from 'rxjs/operators';
 import { ActiveZoneEnter, ActiveZoneExit, WindowMoveEvent } from './models';
 import {
     EMPTY_INTERSECTION,
@@ -9,30 +8,29 @@ import {
     Stick,
     WM_ENTERSIZEMOVE,
     WM_MOVING,
-    // WM_WINDOWPOSCHANGING,
     WM_MOVE,
-    // WM_WINDOWPOSCHANGED,
     WM_EXITSIZEMOVE,
     WM_SIZING,
     WM_SIZE,
 } from './constants';
 
 export class Glazier {
-    private windows: Map<string, BrowserWindow>;
+    private windows: Map<number, BrowserWindow>;
     private enterActiveZoneObservable: Subject<ActiveZoneEnter>;
     private enterActiveZoneReplay: ReplaySubject<ActiveZoneEnter>;
     private exitActiveZoneObservable: Subject<ActiveZoneExit>;
     private dockCommandObservable: Subject<unknown>;
     private subscription: Subscription | null;
     private placeholder: BrowserWindow;
-    private groups: Map<string, Set<string>>;
-    private registry: Map<string, string>;
-    private enterSizeMoveObservable: Subject<{ windowId: string }>;
-    private exitSizeMoveObservable: Subject<{ windowId: string }>;
+    private groups: Map<number, Set<string>>;
+    private registry: Map<number, string>;
+    private enterSizeMoveObservable: Subject<{ windowId: number }>;
+    private exitSizeMoveObservable: Subject<{ windowId: number }>;
     private movingObservable: Subject<WindowMoveEvent>;
     private moveObservable: Subject<WindowMoveEvent>;
     private sizingObservable: Subject<WindowMoveEvent>;
     private sizeObservable: Subject<WindowMoveEvent>;
+    private entityIdCounter: number;
 
     constructor() {
         this.windows = new Map();
@@ -50,10 +48,11 @@ export class Glazier {
         this.sizingObservable = new Subject();
         this.sizeObservable = new Subject();
         this.subscription = null;
+        this.entityIdCounter = 0;
         this.init();
     }
 
-    createGroup(still: string, moving: string): void {
+    /* createGroup(still: string, moving: string): void {
         const existingGroupId = this.registry.get(still);
         const groupId = existingGroupId ?? uuid.v4();
         const existingGroup = this.groups.get(groupId) ?? new Set([still, moving]);
@@ -61,7 +60,7 @@ export class Glazier {
         this.groups.set(groupId, new Set([still, moving]));
         this.registry.set(still, groupId);
         this.registry.set(moving, groupId);
-    }
+    } */
 
     stickWindows(stickData: ActiveZoneEnter): void {
         const { still, moving, stickAt } = stickData;
@@ -248,11 +247,11 @@ export class Glazier {
 
     async createWindow(options: BrowserWindowConstructorOptions): Promise<void> {
         try {
-            const windowId = uuid.v4();
+            const windowId = ++this.entityIdCounter;
             const window = new BrowserWindow(options);
             window.webContents.once('dom-ready', () => {
                 window.webContents.executeJavaScript(
-                    `window.GLAZIER_WINDOW={id:'${windowId}', position: ${JSON.stringify(window.getBounds())}};`,
+                    `window.GLAZIER_WINDOW={id:${windowId}, position: ${JSON.stringify(window.getBounds())}};`,
                 );
             });
             await window.loadURL('http://localhost:9000');

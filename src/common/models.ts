@@ -1,6 +1,6 @@
 import { Stick } from './constants';
 
-export type GlazierWindowId = string;
+export type GlazierWindowId = number;
 
 export interface WindowMoveEvent extends Electron.Rectangle {
     windowId: GlazierWindowId;

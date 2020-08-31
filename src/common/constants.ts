@@ -3,17 +3,17 @@ import { ActiveZoneEnter } from './models';
 export const DEFAULT_ACTIVE_ZONE = 50;
 
 export enum Stick {
-    Left = 'StickLeft',
-    Right = 'StickRight',
-    Top = 'StickTop',
-    Bottom = 'StickBottom',
-    None = 'StickNone',
+    None = 0,
+    Top = 1,
+    Right = 2,
+    Bottom = 3,
+    Left = 4,
 }
 
 export const EMPTY_INTERSECTION: ActiveZoneEnter = {
     intersection: 0,
-    still: '',
-    moving: '',
+    still: 0,
+    moving: 0,
     stickAt: Stick.None,
 };
 

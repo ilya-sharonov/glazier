@@ -10,14 +10,18 @@ declare const GLAZIER_WINDOW: GlazierWindowParam;
 
 const subject = new Subject<WindowMoveEvent>();
 let position: Electron.Rectangle = { x: 0, y: 0, width: 0, height: 0 };
-let groupId = '';
+let parentGroupId: number;
+let rootGroupId: number;
 
 document.addEventListener('DOMContentLoaded', () => {
     position = GLAZIER_WINDOW.position;
+    parentGroupId = 0;
+    rootGroupId = 0;
 });
 
 ipcRenderer.on('position-changed', (_, payload) => {
-    if (payload.windowId === GLAZIER_WINDOW.id) {
+    const { windowId } = payload;
+    if (windowId === GLAZIER_WINDOW.id) {
         position = payload;
         return;
     } else {
@@ -26,8 +30,20 @@ ipcRenderer.on('position-changed', (_, payload) => {
     subject.next(payload);
 });
 
-ipcRenderer.on('group-created', (_, payload) => {
-    groupId = payload;
+ipcRenderer.on('parent-group-changed', (_, payload) => {
+    const { windowId, groupId } = payload;
+    if (windowId === GLAZIER_WINDOW.id) {
+        console.log(`Parent group for ${GLAZIER_WINDOW.id} changed to ${groupId}`);
+        parentGroupId = groupId;
+    }
+});
+
+ipcRenderer.on('root-group-changed', (_, payload) => {
+    const { windowId, groupId } = payload;
+    if (windowId === GLAZIER_WINDOW.id) {
+        console.log(`Root group for ${GLAZIER_WINDOW.id} changed to ${groupId}`);
+        rootGroupId = groupId;
+    }
 });
 
 subject
